@@ -9,6 +9,7 @@
 //  Modified for ShareRove on 2026-09-26:
 //  - copyFile caps each server-side copy chunk at 1 MiB.
 //  - connect(shareName:encrypted:) brackets IPv6 literals for libsmb2.
+//  - initClient(_:encrypted:) negotiates only SMB 3 dialects when encryption is requested.
 //
 
 import Foundation
@@ -1427,6 +1428,11 @@ extension SMB2Manager {
         client.securityMode = [.enabled]
         client.authentication = .ntlmSsp
         client.seal = encrypted
+        if encrypted {
+            // Encryption exists only in SMB 3. Without this, a server that negotiates SMB 2.x gets a
+            // session that is neither encrypted nor signed (libsmb2 turns signing off when sealing).
+            try? client.withThreadSafeContext { smb2_set_version($0, SMB2_VERSION_ANY3) }
+        }
 
         client.domain = _domain
         client.workstation = _workstation
