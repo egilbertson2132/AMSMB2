@@ -6,7 +6,7 @@
 > 5. Requesting encryption negotiates only SMB 3 dialects, so an SMB 2 server cannot end up with a session that is neither encrypted nor signed (`AMSMB2.swift`).
 > 6. A failed negotiate, login, or tree connect reports its NT status (`STATUS_LOGON_FAILURE`, `STATUS_BAD_NETWORK_NAME`, ...) instead of an empty "Error code 1", whose errno is EPERM (`Context.swift`).
 >
-> Changed files carry a dated note. The fixes are offered upstream; this fork goes away once a release includes them. Licensing is unchanged (see below).
+> Changed files carry a dated note. The fixes have not been offered upstream yet; if a later AMSMB2 release includes them, ShareRove will go back to it and this fork will be retired. Licensing is unchanged (see below).
 
 # AMSMB2
 
