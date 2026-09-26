@@ -10,6 +10,8 @@
 //  - wait_for_reply destroys the context when it stops waiting on a timeout or a poll error,
 //    and reads C's errno for the poll check.
 //  - deinit no longer sends a disconnect; it only destroys the context.
+//  - service(revents:) reads the error before destroying the context, and names the NT status
+//    libsmb2 recorded when the socket failure that followed replaced the error text.
 //
 
 import Foundation
@@ -215,11 +217,21 @@ extension SMB2Client {
     }
 
     func service(revents: Int32) throws {
+        let statusBefore = smb2_get_nterror(context)
         let result = smb2_service(context, revents)
         if result < 0 {
+            // The error lives in the context, so read it before destroying the context. libsmb2
+            // closes the socket before it reports a failed negotiate, login, or tree connect, then
+            // fails reading from that socket, which replaces the error text. The NT status it
+            // recorded survives; name it, since it says what went wrong and the errno does not.
+            var description = error ?? ""
+            let status = smb2_get_nterror(context)
+            if status != 0, status != statusBefore {
+                description = "\(String(cString: nterror_to_str(UInt32(bitPattern: status)))): \(description)"
+            }
             smb2_destroy_context(context)
             context = nil
-            try POSIXError.throwIfError(result, description: error)
+            try POSIXError.throwIfError(result, description: description)
         }
     }
 }
