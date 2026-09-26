@@ -6,6 +6,9 @@
 //  Copyright © 2018 Mousavian. Distributed under MIT license.
 //  All rights reserved.
 //
+//  Modified for ShareRove on 2026-09-26:
+//  - copyFile caps each server-side copy chunk at 1 MiB.
+//
 
 import Foundation
 #if !canImport(Darwin)
@@ -1589,8 +1592,9 @@ extension SMB2Manager {
         let fileSource = try SMB2FileHandle(forReadingAtPath: path, on: client)
         let size = try Int64(fileSource.fstat().smb2_size)
         let sourceKey: IOCtl.RequestResumeKey = try fileSource.fcntl(command: .srvRequestResumeKey)
-        // TODO: Get chunk size from server
-        let chunkSize = fileSource.optimizedWriteSize
+        // Windows and Samba reject a copy chunk over 1 MiB (MS-SMB2 ServerSideCopyMaxChunkSize),
+        // and servers often negotiate a larger write size (Samba defaults to 8 MiB).
+        let chunkSize = min(fileSource.optimizedWriteSize, 1_048_576)
         let chunkArray = stride(from: 0, to: UInt64(size), by: chunkSize).map {
             IOCtl.SrvCopyChunk(
                 sourceOffset: $0, targetOffset: $0,
