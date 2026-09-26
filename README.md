@@ -1,3 +1,11 @@
+> **ShareRove fork.** Branch `sharerove` is AMSMB2 4.0.3 with four fixes, used by [ShareRove](https://github.com/egilbertson2132/ShareRove):
+> 1. After a request times out or polling fails, the context is destroyed instead of serviced again, so a late reply can never reach a stale callback (`Context.swift`).
+> 2. Releasing a client no longer sends a blocking disconnect from `deinit` (`Context.swift`).
+> 3. Server-side copy chunks are capped at 1 MiB, the limit Windows and Samba enforce (`AMSMB2.swift`).
+> 4. IPv6 hosts keep their brackets when handed to libsmb2 (`AMSMB2.swift`).
+>
+> Changed files carry a dated note. The fixes are offered upstream; this fork goes away once a release includes them. Licensing is unchanged (see below).
+
 # AMSMB2
 
 
