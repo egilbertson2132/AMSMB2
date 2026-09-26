@@ -8,6 +8,7 @@
 //
 //  Modified for ShareRove on 2026-09-26:
 //  - copyFile caps each server-side copy chunk at 1 MiB.
+//  - connect(shareName:encrypted:) brackets IPv6 literals for libsmb2.
 //
 
 import Foundation
@@ -1438,7 +1439,9 @@ extension SMB2Manager {
         let client = try SMB2Client(timeout: _timeout)
         self.client = client
         initClient(client, encrypted: encrypted)
-        let server = url.host! + (url.port.map { ":\($0)" } ?? "")
+        // libsmb2 reads "host:port", so an IPv6 literal needs its brackets back.
+        let host = url.host!.contains(":") ? "[\(url.host!)]" : url.host!
+        let server = host + (url.port.map { ":\($0)" } ?? "")
         try client.connect(server: server, share: shareName, user: _user)
         return client
     }
