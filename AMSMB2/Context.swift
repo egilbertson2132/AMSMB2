@@ -6,9 +6,17 @@
 //  Copyright © 2018 Mousavian. Distributed under MIT license.
 //  All rights reserved.
 //
+//  Modified for ShareRove on 2026-09-26:
+//  - wait_for_reply destroys the context when it stops waiting on a timeout or a poll error,
+//    and reads C's errno for the poll check.
+//  - deinit no longer sends a disconnect; it only destroys the context.
+//
 
 import Foundation
 import SMB2
+
+/// C's errno. Inside SMB2Client a bare `errno` is the property derived from the last NT status.
+private func systemErrno() -> Int32 { errno }
 
 /// Provides synchronous operation on SMB2
 final class SMB2Client: CustomDebugStringConvertible, CustomReflectable, @unchecked Sendable {
@@ -22,9 +30,9 @@ final class SMB2Client: CustomDebugStringConvertible, CustomReflectable, @unchec
     }
 
     deinit {
-        if isConnected {
-            try? self.disconnect()
-        }
+        // No disconnect here: it is a blocking round trip on whichever thread releases the
+        // client, and after a timeout it would service a context whose late reply targets a
+        // stale callback. Destroying the context closes the socket, which ends the session.
         try? withThreadSafeContext { context in
             self.context = nil
             smb2_destroy_context(context)
@@ -368,12 +376,21 @@ extension SMB2Client {
             pfd.fd = fileDescriptor
             pfd.events = try whichEvents()
 
-            if pfd.fd < 0 || (poll(&pfd, 1, 1000) < 0 && errno != EAGAIN) {
+            if pfd.fd < 0 {
                 throw POSIXError(.init(errno), description: error)
+            }
+
+            if poll(&pfd, 1, 1000) < 0 {
+                let pollError = systemErrno()
+                if pollError == EINTR || pollError == EAGAIN { continue }
+                let description = error
+                abandonOutstandingRequests()
+                throw POSIXError(.init(pollError), description: description)
             }
 
             if pfd.revents == 0 {
                 if timeout > 0, Date().timeIntervalSince(startDate) > timeout {
+                    abandonOutstandingRequests()
                     throw POSIXError(.ETIMEDOUT)
                 }
                 continue
@@ -381,6 +398,14 @@ extension SMB2Client {
 
             try service(revents: Int32(pfd.revents))
         }
+    }
+
+    /// The server may still answer a request we stopped waiting for, and that request's callback
+    /// data lives on the caller's stack. Destroying the context closes the socket first, so the
+    /// late reply can never be delivered; `generic_handler` ignores callbacks on a closed socket.
+    private func abandonOutstandingRequests() {
+        smb2_destroy_context(context)
+        context = nil
     }
 
     static let generic_handler: smb2_command_cb = { smb2, status, command_data, cbdata in
